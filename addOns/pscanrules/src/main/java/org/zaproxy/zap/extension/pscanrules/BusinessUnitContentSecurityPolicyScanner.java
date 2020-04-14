@@ -16,11 +16,14 @@ import org.parosproxy.paros.network.HttpStatusCode;
 import org.zaproxy.zap.extension.pscan.PassiveScanThread;
 import org.zaproxy.zap.extension.pscan.PluginPassiveScanner;
 
+import java.io.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScanner {
     private static final Logger LOG = Logger.getLogger(PluginPassiveScanner.class);
@@ -31,7 +34,7 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
 
     private static final String HTTP_HEADER_CSP = "Content-Security-Policy";
 
-    private static final String WILDCARD_URI = "http://*";
+    private static final String WILDCARD_URI = "https://*";
     private static final URI PARSED_WILDCARD_URI = URI.parse(WILDCARD_URI);
 
     private PassiveScanThread parent = null;
@@ -58,7 +61,6 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
     public void scanHttpResponseReceive(HttpMessage msg, int id, Source source) {
         int startTime = LocalDateTime.now().getSecond();
         int noticesRisk = Alert.RISK_INFO;
-        boolean cspHeaderExists = false;
 
 //        if (LOG.isDebugEnabled()) {
         LOG.debug("Start" + id + " : " + msg.getRequestHeader().getURI().toString());
@@ -70,14 +72,37 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
         }
 
         List<String> cspHeaderValues = msg.getResponseHeader().getHeaderValues(HTTP_HEADER_CSP);
-        if (!cspHeaderValues.isEmpty()) {
-            cspHeaderExists = true;
-        }
 
-        if (cspHeaderExists) {
+
+        List<List<String>> result = new ArrayList<>();
+
+        if (!cspHeaderValues.isEmpty()) {
+            //TODO begin of comparing validation
+            String fileWithCsp = "src/main/resources/00015_security_headers.impex";
+//            String fileWithCsp = "src/main/resources/23_[ES-172]-Security_Config_Parameters.impex";
+            try {
+                BufferedReader reader = new BufferedReader(new FileReader(fileWithCsp));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.contains("headerName")) {
+                        while (!(line = reader.readLine()).contains("#")) {
+
+                            result.add(Arrays
+                                    .stream(line.replace("\"", "")
+                                            .split(";"))
+                                    .skip(5)
+                                    .collect(Collectors.toList()));
+                        }
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            String policyText = cspHeaderValues.toString().replaceAll("[\\[\\]]", "");
+            checkIfEquals(result, policyText);
             List<Notice> notices = new ArrayList<>();
             Origin origin = URI.parse(msg.getRequestHeader().getURI().toString());
-            String policyText = cspHeaderValues.toString().replaceAll("[\\[\\]]","" );
             Policy policy = ParserWithLocation.parse(policyText, origin, notices);
 
             if (!notices.isEmpty()) {
@@ -87,8 +112,6 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
                         || cspNoticesString.contains(
                         Constant.messages.getString(MESSAGE_PREFIX + "notices.warnings"))) {
                     noticesRisk = Alert.RISK_LOW;
-                } else {
-                    noticesRisk = Alert.RISK_INFO;
                 }
                 raiseAlert(msg, Constant.messages.getString(MESSAGE_PREFIX + "notices.name"), id, cspNoticesString
                         , getHeaderField(msg, HTTP_HEADER_CSP).get(0), noticesRisk, cspHeaderValues.get(0));
@@ -101,39 +124,31 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
                 String wildcardSrcDesc =
                         Constant.messages.getString(
                                 MESSAGE_PREFIX + "wildcard.desc", allowedWildcardSrcs);
-                raiseAlert(
-                        msg,
-                        Constant.messages.getString(MESSAGE_PREFIX + "wildcard.name"),
-                        id,
-                        wildcardSrcDesc,
-                        getHeaderField(msg, HTTP_HEADER_CSP).get(0),
-                        Alert.RISK_MEDIUM,
-                        cspHeaderValues.get(0));
+                raiseAlert(msg, Constant.messages.getString(MESSAGE_PREFIX + "wildcard.name"), id, wildcardSrcDesc,
+                        getHeaderField(msg, HTTP_HEADER_CSP).get(0), Alert.RISK_MEDIUM, cspHeaderValues.get(0));
             }
 
             if (policy.allowsUnsafeInlineScript()) {
-                raiseAlert(
-                        msg,
-                        Constant.messages.getString(MESSAGE_PREFIX + "scriptsrc.unsafe.name"),
-                        id,
+                raiseAlert(msg, Constant.messages.getString(MESSAGE_PREFIX + "scriptsrc.unsafe.name"), id,
                         Constant.messages.getString(MESSAGE_PREFIX + "scriptsrc.unsafe.desc"),
-                        getHeaderField(msg, HTTP_HEADER_CSP).get(0),
-                        Alert.RISK_MEDIUM,
-                        cspHeaderValues.get(0));
+                        getHeaderField(msg, HTTP_HEADER_CSP).get(0), Alert.RISK_MEDIUM, cspHeaderValues.get(0));
             }
 
             if (policy.allowsUnsafeInlineStyle()) {
-                raiseAlert(
-                        msg,
-                        Constant.messages.getString(MESSAGE_PREFIX + "stylesrc.unsafe.name"),
-                        id,
-                        Constant.messages.getString(MESSAGE_PREFIX + "stylesrc.unsafe.desc"),
-                        getHeaderField(msg, HTTP_HEADER_CSP).get(0),
-                        Alert.RISK_MEDIUM,
-                        cspHeaderValues.get(0));
+                raiseAlert(msg, Constant.messages.getString(MESSAGE_PREFIX + "stylesrc.unsafe.name"), id,
+                        Constant.messages.getString(MESSAGE_PREFIX + "stylesrc.unsafe.desc"), getHeaderField(msg, HTTP_HEADER_CSP).get(0),
+                        Alert.RISK_MEDIUM, cspHeaderValues.get(0));
             }
 
         } else {
+            /*raiseAlert(
+                    msg,
+                    Constant.messages.getString(MESSAGE_PREFIX + "stylesrc.unsafe.name"),
+                    id,
+                    Constant.messages.getString(MESSAGE_PREFIX + "stylesrc.unsafe.desc"),
+                    getHeaderField(msg, HTTP_HEADER_CSP).get(0),
+                    Alert.RISK_MEDIUM,
+                    cspHeaderValues.get(0));*/
             LOG.debug("CSP do not find!!!");
         }
 
@@ -142,6 +157,23 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
                 + " took "
                 + (LocalDateTime.now().getSecond() - startTime)
                 + " seconds");
+
+    }
+
+    private void checkIfEquals(List<List<String>> result, String policyText) {
+        String[] headerCsp = policyText.split(";");
+
+        for (int i = 0; i < result.size(); i++) {
+            for (int j = 0; j < result.get(i).size(); j++) {
+                if (result.get(i).get(1).equals(headerCsp[i].trim())) {
+                    System.out.println("BINGO");
+                } else {
+                    System.out.println("NOT!");
+                    System.out.println("res = " + result.get(i).get(1));
+                    System.out.println("hed = " + headerCsp[i]);
+                }
+            }
+        }
 
     }
 
@@ -164,7 +196,7 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
 
         List<Notice> warnList = Notice.getAllWarnings((ArrayList<Notice>) notices);
         if (!warnList.isEmpty()) {
-            stringBuilder.append(Constant.messages.getString(MESSAGE_PREFIX, "notice.warnings"))
+            stringBuilder.append(Constant.messages.getString(MESSAGE_PREFIX + "notices.warnings"))
                     .append(NEWLINE);
             warnList
                     .forEach(notice -> stringBuilder.append(notice.show()).append(NEWLINE));
@@ -172,7 +204,7 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
 
         List<Notice> infoList = Notice.getAllInfos((ArrayList<Notice>) notices);
         if (!infoList.isEmpty()) {
-            stringBuilder.append(Constant.messages.getString(MESSAGE_PREFIX, "notice.infoItems"))
+            stringBuilder.append(Constant.messages.getString(MESSAGE_PREFIX + "notices.infoItems"))
                     .append(NEWLINE);
             infoList
                     .forEach(notice -> stringBuilder.append(notice.show()).append(NEWLINE));
@@ -224,6 +256,11 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
             }
         }
         return matchedHeaders;
+    }
+
+    @Override
+    public int getPluginId() {
+        return PLUGIN_ID;
     }
 
     private List<String> getAllowedWildcardSources(String policyText, Origin origin) {
