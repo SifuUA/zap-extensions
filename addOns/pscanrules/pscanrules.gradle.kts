@@ -30,6 +30,7 @@ zapAddOn {
 
 dependencies {
     implementation("com.shapesecurity:salvation:2.7.1")
+    implementation("org.bitbucket.cowwoc", "diff-match-patch", "1.2")
     implementation(project(":sharedutils"))
     compileOnly(parent!!.childProjects.get("custompayloads")!!)
 
