@@ -15,7 +15,6 @@ import org.zaproxy.zap.extension.pscan.PluginPassiveScanner;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -24,83 +23,100 @@ import java.util.Objects;
 public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScanner {
     private static final Logger LOG = Logger.getLogger(PluginPassiveScanner.class);
 
-    private static final String MESSAGE_PREFIX = "pscanrules.bucspscanner.";
     private static final int PLUGIN_ID = 10100;
-//    private static final Logger LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-
+    private static final String MESSAGE_PREFIX = "pscanrules.bucspscanner.";
     private static final String HTTP_HEADER_CSP = "Content-Security-Policy";
-
-    private static final String WILDCARD_URI = "https://*";
-    private static final URI PARSED_WILDCARD_URI = URI.parse(WILDCARD_URI);
+    String configFilePath = "C:\\Projects\\zap_plugin\\zap-extensions\\addOns\\pscanrules\\src\\main\\resources\\config\\bu_csp_configuration";
 
     private PassiveScanThread parent = null;
 
     @Override
     public void scanHttpResponseReceive(HttpMessage msg, int id, Source source) {
-        String text1 = "ABCDELMN";
-        String text2 = "ABCFGLMN";
-        DiffMatchPatch dmp = new DiffMatchPatch();
-        LinkedList<DiffMatchPatch.Diff> diff = dmp.diffMain(text1, text2, false);
-        System.out.println(diff);
-
-        int startTime = LocalDateTime.now().getSecond();
-
 //        if (LOG.isDebugEnabled()) {
-        LOG.debug("Start" + id + " : " + msg.getRequestHeader().getURI().toString());
+        LOG.info("Start of scanning" + id + " : " + msg.getRequestHeader().getURI().toString());
 //        }
 
         // Only really applies to HTML responses, but also check on Low threshold
         if (isNotHtmlResponse(msg)) {
             return;
         }
-
         List<String> cspHeaderValues = msg.getResponseHeader().getHeaderValues(HTTP_HEADER_CSP);
-        String cspSample = null;
 
         if (!cspHeaderValues.isEmpty()) {
-            String configFile = "C:\\Projects\\zap_plugin\\zap-extensions\\addOns\\pscanrules\\src\\main\\resources\\config\\bu_csp_configuration";
-
-            try {
-                String buName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
-
-                BufferedReader reader = new BufferedReader(new FileReader(configFile));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains(buName)) {
-                        cspSample = reader.readLine();
-                        break;
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
+            String cspSample = getCSPFromConfig(msg);
             String policyText = cspHeaderValues.toString().replaceAll("[\\[\\]]", "");
             List<String> sampleDirectives = Arrays.asList(Objects.requireNonNull(cspSample).split(";"));
             List<String> readDirectives = Arrays.asList(policyText.split(";"));
 
-            for (int i = 0; i < sampleDirectives.size(); i++) {
-                if (sampleDirectives.get(i).equals(readDirectives.get(i))) {
-                    System.out.println("BINGO!");
-                } else {
-                    Alert alert = new Alert(getPluginId(), Alert.RISK_HIGH, Alert.CONFIDENCE_MEDIUM, // PluginID, Risk, Reliability
-                            getName());
-                    alert.setDetail(
-                            getDesc() + getAlertName(sampleDirectives, i),  // Description
-                            msg.getRequestHeader().getURI().toString(), // URI
-                            "", // Param
-                            "", // Attack
-                            "other info", // Other info
-                            getSolution(), // Solution
-                            getReference(), // References
-                            "evidence", // Evidence
-                            16, // CWE-16: Configuration
-                            15, // WASC-15: Application Misconfiguration
-                            msg); // HttpMessage
-                    parent.raiseAlert(id, alert);
-                }
+            compareCSP(msg, id, sampleDirectives, readDirectives);
+        }
+    }
+
+    private void compareCSP(HttpMessage msg, int id, List<String> sampleDirectives, List<String> readDirectives) {
+        for (int i = 0; i < sampleDirectives.size(); i++) {
+            if (sampleDirectives.get(i).equals(readDirectives.get(i))) {
+                LOG.info(getName() + getDirectiveName(sampleDirectives, i) + " is matches the pattern");
+            } else {
+                raiseAlert(msg, id, sampleDirectives, readDirectives, i);
             }
         }
+    }
+
+    private void raiseAlert(HttpMessage msg, int id, List<String> sampleDirectives, List<String> readDirectives, int i) {
+        Alert alert = new Alert(getPluginId(), Alert.RISK_MEDIUM, Alert.CONFIDENCE_MEDIUM, // PluginID, Risk, Reliability
+                getName() + getDirectiveName(sampleDirectives, i));
+        alert.setDetail(
+                getDesc() + getAlertName(sampleDirectives, i),  // Description
+                msg.getRequestHeader().getURI().toString(), // URI
+                "", // Param
+                "", // Attack
+                getDifferencesDetails(sampleDirectives, readDirectives, i), // Other info
+                getSolution(), // Solution
+                getReference(), // References
+                "evidence", // Evidence
+                16, // CWE-16: Configuration
+                15, // WASC-15: Application Misconfiguration
+                msg); // HttpMessage
+        parent.raiseAlert(id, alert);
+    }
+
+    private String getCSPFromConfig(HttpMessage msg) {
+        String cspSample = null;
+        try {
+            String buName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
+            BufferedReader reader = new BufferedReader(new FileReader(configFilePath));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains(buName)) {
+                    cspSample = reader.readLine();
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            LOG.error(e);
+        }
+        return cspSample;
+    }
+
+    private String getDirectiveName(List<String> sampleDirectives, int i) {
+        return Arrays.stream(sampleDirectives.get(i).trim().split(" ")).findFirst().get();
+    }
+
+    private String getDifferencesDetails(List<String> sampleDirectives, List<String> readDirectives, int i) {
+        StringBuilder sb = new StringBuilder();
+        DiffMatchPatch diffMatchPatch = new DiffMatchPatch();
+        LinkedList<DiffMatchPatch.Diff> listOfDiff = diffMatchPatch.diffMain(sampleDirectives.get(i), readDirectives.get(i), false);
+
+        for (DiffMatchPatch.Diff node : listOfDiff) {
+            if (node.operation.name().equals("EQUAL")) {
+                sb.append("This is part is equal: ").append(node.text).append("\n");
+            } else if (node.operation.name().equals("INSERT")) {
+                sb.append("This is part was defined in configuration file: ").append(node.text).append("\n");
+            } else {//DELETE
+                sb.append("This is a new directive or some of directive has been modified: ").append(node.text).append("\n");
+            }
+        }
+        return sb.toString();
     }
 
     private String getAlertName(List<String> sampleDirectives, int i) {
