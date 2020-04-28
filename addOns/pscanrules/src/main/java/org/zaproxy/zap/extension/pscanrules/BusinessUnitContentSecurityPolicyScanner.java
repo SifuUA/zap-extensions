@@ -8,11 +8,11 @@ import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.core.scanner.Alert;
 import org.parosproxy.paros.core.scanner.Plugin;
 import org.parosproxy.paros.network.HttpMessage;
-import org.parosproxy.paros.network.HttpStatusCode;
 import org.zaproxy.zap.extension.pscan.PassiveScanThread;
 import org.zaproxy.zap.extension.pscan.PluginPassiveScanner;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
@@ -26,15 +26,14 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
     private static final int PLUGIN_ID = 10100;
     private static final String MESSAGE_PREFIX = "pscanrules.bucspscanner.";
     private static final String HTTP_HEADER_CSP = "Content-Security-Policy";
-    String configFilePath = "C:\\Projects\\zap_plugin\\zap-extensions\\addOns\\pscanrules\\src\\main\\resources\\config\\bu_csp_configuration";
 
     private PassiveScanThread parent = null;
 
     @Override
     public void scanHttpResponseReceive(HttpMessage msg, int id, Source source) {
-//        if (LOG.isDebugEnabled()) {
-        LOG.info("Start of scanning" + id + " : " + msg.getRequestHeader().getURI().toString());
-//        }
+        if (LOG.isDebugEnabled()) {
+            LOG.info("Start of scanning" + id + " : " + msg.getRequestHeader().getURI().toString());
+        }
 
         // Only really applies to HTML responses, but also check on Low threshold
         if (isNotHtmlResponse(msg)) {
@@ -48,32 +47,32 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
             List<String> sampleDirectives = Arrays.asList(Objects.requireNonNull(cspSample).split(";"));
             List<String> readDirectives = Arrays.asList(policyText.split(";"));
 
-            compareCSP(msg, id, sampleDirectives, readDirectives);
+            compareCSP(msg, id, sampleDirectives, readDirectives, cspHeaderValues);
         }
     }
 
-    private void compareCSP(HttpMessage msg, int id, List<String> sampleDirectives, List<String> readDirectives) {
+    private void compareCSP(HttpMessage msg, int id, List<String> sampleDirectives, List<String> readDirectives, List<String> cspHeaderValues) {
         for (int i = 0; i < sampleDirectives.size(); i++) {
             if (sampleDirectives.get(i).equals(readDirectives.get(i))) {
                 LOG.info(getName() + getDirectiveName(sampleDirectives, i) + " is matches the pattern");
             } else {
-                raiseAlert(msg, id, sampleDirectives, readDirectives, i);
+                raiseAlert(msg, id, sampleDirectives, readDirectives, i, cspHeaderValues);
             }
         }
     }
 
-    private void raiseAlert(HttpMessage msg, int id, List<String> sampleDirectives, List<String> readDirectives, int i) {
-        Alert alert = new Alert(getPluginId(), Alert.RISK_MEDIUM, Alert.CONFIDENCE_MEDIUM, // PluginID, Risk, Reliability
+    private void raiseAlert(HttpMessage msg, int id, List<String> sampleDirectives, List<String> readDirectives, int i, List<String> cspHeaderValues) {
+        Alert alert = new Alert(getPluginId(), Alert.RISK_HIGH, Alert.CONFIDENCE_MEDIUM, // PluginID, Risk, Reliability
                 getName() + getDirectiveName(sampleDirectives, i));
         alert.setDetail(
                 getDesc() + getAlertName(sampleDirectives, i),  // Description
                 msg.getRequestHeader().getURI().toString(), // URI
-                "", // Param
+                getName(), // Param
                 "", // Attack
                 getDifferencesDetails(sampleDirectives, readDirectives, i), // Other info
                 getSolution(), // Solution
                 getReference(), // References
-                "evidence", // Evidence
+                cspHeaderValues.get(0), // Evidence
                 16, // CWE-16: Configuration
                 15, // WASC-15: Application Misconfiguration
                 msg); // HttpMessage
@@ -84,7 +83,7 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
         String cspSample = null;
         try {
             String buName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
-            BufferedReader reader = new BufferedReader(new FileReader(configFilePath));
+            BufferedReader reader = new BufferedReader(new FileReader(new File("./addOns/pscanrules/src/main/resources/config/bu_csp_configuration")));
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.contains(buName)) {
@@ -125,8 +124,7 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
 
     private boolean isNotHtmlResponse(HttpMessage msg) {
         return (!msg.getResponseHeader().isHtml()
-                || HttpStatusCode.isRedirection(msg.getResponseHeader().getStatusCode()))
-                && !Plugin.AlertThreshold.LOW.equals(this.getAlertThreshold());
+                && !Plugin.AlertThreshold.LOW.equals(this.getAlertThreshold()));
     }
 
     @Override
@@ -148,12 +146,17 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
         return Constant.messages.getString(MESSAGE_PREFIX + "desc");
     }
 
-
     private String getSolution() {
         return Constant.messages.getString(MESSAGE_PREFIX + "soln");
     }
 
     private String getReference() {
         return Constant.messages.getString(MESSAGE_PREFIX + "refs");
+    }
+
+    private String getConfigPath() {
+        System.out.println("1 - " + getClass().getResource("/config/bu_csp_configuration").toString());
+        System.out.println("2 - " + getClass().getResource("/config/bu_csp_configuration").getPath());
+        return getClass().getResource("/config/bu_csp_configuration").toString();
     }
 }
