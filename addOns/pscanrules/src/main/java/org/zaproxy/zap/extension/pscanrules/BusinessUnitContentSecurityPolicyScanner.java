@@ -35,7 +35,6 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
             LOG.info("Start of scanning" + id + " : " + msg.getRequestHeader().getURI().toString());
         }
 
-        // Only really applies to HTML responses, but also check on Low threshold
         if (isNotHtmlResponse(msg)) {
             return;
         }
@@ -77,14 +76,18 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
                 15, // WASC-15: Application Misconfiguration
                 msg); // HttpMessage
         parent.raiseAlert(id, alert);
+        if (LOG.isDebugEnabled()) {
+            LOG.info("Alert raised with information" + alert.toString());
+        }
     }
 
     private String getCSPFromConfig(HttpMessage msg) {
         String cspSample = null;
         try {
-            String buName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
-            BufferedReader reader = new BufferedReader(new FileReader(new File("./addOns/pscanrules/src/main/resources/config/bu_csp_configuration")));
             String line;
+            String buName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
+            BufferedReader reader = new BufferedReader(new FileReader(getConfigFile()));
+
             while ((line = reader.readLine()) != null) {
                 if (line.contains(buName)) {
                     cspSample = reader.readLine();
@@ -92,7 +95,9 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
                 }
             }
         } catch (IOException e) {
-            LOG.error(e);
+            if (LOG.isDebugEnabled()) {
+                LOG.error("Business Unit Scanner Error while read config " + e);
+            }
         }
         return cspSample;
     }
@@ -111,7 +116,7 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
                 sb.append("This is part is equal: ").append(node.text).append("\n");
             } else if (node.operation.name().equals("INSERT")) {
                 sb.append("This is part was defined in configuration file: ").append(node.text).append("\n");
-            } else {//DELETE
+            } else {
                 sb.append("This is a new directive or some of directive has been modified: ").append(node.text).append("\n");
             }
         }
@@ -154,9 +159,9 @@ public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScann
         return Constant.messages.getString(MESSAGE_PREFIX + "refs");
     }
 
-    private String getConfigPath() {
-        System.out.println("1 - " + getClass().getResource("/config/bu_csp_configuration").toString());
-        System.out.println("2 - " + getClass().getResource("/config/bu_csp_configuration").getPath());
-        return getClass().getResource("/config/bu_csp_configuration").toString();
+    private File getConfigFile() {
+        //File configFile = new File("C:\\Users\\Oleksii_Kres\\Idea Project\\zap_project\\zap-extensions\\addOns\\pscanrules\\src\\main\\zapHomeFiles\\bu_config\\bu_csp_configuration");
+        File configFile = new File(Constant.getZapHome() + File.separator + "bu_config" + File.separator + "bu_csp_configuration");
+        return configFile;
     }
 }
