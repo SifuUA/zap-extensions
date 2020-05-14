@@ -6,11 +6,11 @@ import org.parosproxy.paros.network.HttpMessage;
 
 import static org.junit.Assert.assertEquals;
 
-public class BusinessUnitContentSecurityPolicyScannerTest extends PassiveScannerTest<BusinessUnitContentSecurityPolicyScanner> {
+public class ContentSecurityPolicyDiffFinderTest extends PassiveScannerTest<ContentSecurityPolicyDiffFinder> {
 
     @Override
-    protected BusinessUnitContentSecurityPolicyScanner createScanner() {
-        return new BusinessUnitContentSecurityPolicyScanner();
+    protected ContentSecurityPolicyDiffFinder createScanner() {
+        return new ContentSecurityPolicyDiffFinder();
     }
 
     @Test(expected = NullPointerException.class)

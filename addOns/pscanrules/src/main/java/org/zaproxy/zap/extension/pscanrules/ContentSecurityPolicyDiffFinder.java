@@ -20,11 +20,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 
-public class BusinessUnitContentSecurityPolicyScanner extends PluginPassiveScanner {
-    private static final Logger LOG = Logger.getLogger(PluginPassiveScanner.class);
+public class ContentSecurityPolicyDiffFinder extends PluginPassiveScanner {
+    private static final Logger LOG = Logger.getLogger(ContentSecurityPolicyDiffFinder.class);
 
     private static final int PLUGIN_ID = 10100;
-    private static final String MESSAGE_PREFIX = "pscanrules.bucspscanner.";
+    private static final String MESSAGE_PREFIX = "pscanrules.cspdifffinder.";
     private static final String HTTP_HEADER_CSP = "Content-Security-Policy";
 
     private PassiveScanThread parent = null;
