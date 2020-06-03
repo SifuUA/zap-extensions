@@ -20,11 +20,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 
-public class ContentSecurityPolicyDiffFinder extends PluginPassiveScanner {
-    private static final Logger LOG = Logger.getLogger(ContentSecurityPolicyDiffFinder.class);
+public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner {
+    private static final Logger LOG = Logger.getLogger(ContentSecurityPolicyDifferenceFinder.class);
 
     private static final int PLUGIN_ID = 10100;
-    private static final String MESSAGE_PREFIX = "pscanrules.cspdifffinder.";
+    private static final String MESSAGE_PREFIX = "pscanrules.cspdifferencefinder.";
     private static final String HTTP_HEADER_CSP = "Content-Security-Policy";
 
     private PassiveScanThread parent = null;
@@ -112,18 +112,18 @@ public class ContentSecurityPolicyDiffFinder extends PluginPassiveScanner {
         String cspSample = null;
         try {
             String line;
-            String buName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
+            String siteName = URI.parse(msg.getRequestHeader().getURI().toString()).host;
             BufferedReader reader = new BufferedReader(new FileReader(getConfigFile()));
 
             while ((line = reader.readLine()) != null) {
-                if (line.contains(buName)) {
+                if (line.contains(siteName)) {
                     cspSample = reader.readLine();
                     break;
                 }
             }
         } catch (IOException e) {
             if (LOG.isDebugEnabled()) {
-                LOG.error("Business Unit Scanner Error while read config " + e);
+                LOG.error("Error while read config file" + e);
             }
         }
         return cspSample;
@@ -140,11 +140,11 @@ public class ContentSecurityPolicyDiffFinder extends PluginPassiveScanner {
 
         for (DiffMatchPatch.Diff node : listOfDiff) {
             if (node.operation.name().equals("EQUAL")) {
-                sb.append("This is part is equal in bu_csp_configuration file and CSP from site: ").append(node.text).append("\n");
+                sb.append("The following part is equal in site_csp_configuration file and CSP from site: ").append(node.text).append("\n");
             } else if (node.operation.name().equals("INSERT")) {
-                sb.append("This is new CSP directives : ").append(node.text).append("\n");
+                sb.append("The following part is new CSP directives: ").append(node.text).append("\n");
             } else {
-                sb.append("This is a new directive or some of directive has been modified: ").append(node.text).append("\n");
+                sb.append("The following part with new directive or some of directive has been modified: ").append(node.text).append("\n");
             }
         }
         return sb.toString();
@@ -175,21 +175,20 @@ public class ContentSecurityPolicyDiffFinder extends PluginPassiveScanner {
     }
 
     public String getDesc() {
-        return Constant.messages.getString(MESSAGE_PREFIX + "desc");
+        return Constant.messages.getString(MESSAGE_PREFIX + "description");
     }
 
     private String getSolution() {
-        return Constant.messages.getString(MESSAGE_PREFIX + "soln");
+            return Constant.messages.getString(MESSAGE_PREFIX + "solution");
     }
 
     private String getReference() {
-        return Constant.messages.getString(MESSAGE_PREFIX + "refs");
+        return Constant.messages.getString(MESSAGE_PREFIX + "reference");
     }
 
     private File getConfigFile() {
-        //File configFile = new File("C:\\Users\\Oleksii_Kres\\Idea Project\\zap_project\\zap-extensions\\addOns\\pscanrules\\src\\main\\zapHomeFiles\\bu_config\\bu_csp_configuration");
-        File configFile = new File(Constant.getZapHome() + File.separator + "bu_config" + File.separator + "bu_csp_configuration");
-        return configFile;
+        return new File("C:\\Users\\Oleksii_Kres\\Idea Project\\zap_project\\zap-extensions\\addOns\\pscanrules\\src\\main\\zapHomeFiles\\site_config\\site_csp_configuration");
+        //return new File(Constant.getZapHome() + File.separator + "site_config" + File.separator + "site_csp_configuration");
     }
 }
 
@@ -226,7 +225,7 @@ class AlertDto {
     }
 
     public static class Builder {
-        private AlertDto alertDto;
+        private final AlertDto alertDto;
 
         public Builder() {
             alertDto = new AlertDto();
@@ -263,7 +262,7 @@ class AlertDto {
         }
 
         public AlertDto build() {
-            return  alertDto;
+            return alertDto;
         }
     }
 }
