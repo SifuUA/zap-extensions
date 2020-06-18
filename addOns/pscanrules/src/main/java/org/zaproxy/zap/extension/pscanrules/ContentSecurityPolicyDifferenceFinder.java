@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner {
     private static final Logger LOG = Logger.getLogger(ContentSecurityPolicyDifferenceFinder.class);
@@ -43,9 +44,13 @@ public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner 
         if (!cspHeaderValues.isEmpty()) {
             String cspSample = getCSPFromConfig(msg);
             String policyText = cspHeaderValues.toString().replaceAll("[\\[\\]]", "");
-            List<String> sampleDirectives = Arrays.asList(Objects.requireNonNull(cspSample).split(";"));
-            List<String> readDirectives = Arrays.asList(policyText.split(";"));
 
+            List<String> sampleDirectives = Arrays.stream(Objects.requireNonNull(cspSample).split(";"))
+                    .map(String::trim)
+                    .collect(Collectors.toList());
+            List<String> readDirectives = Arrays.stream(policyText.split(";"))
+                    .map(String::trim)
+                    .collect(Collectors.toList());
             compareCSP(msg, id, sampleDirectives, readDirectives, cspHeaderValues);
         }
     }
@@ -58,10 +63,10 @@ public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner 
                 AlertDto alertDto = new AlertDto.Builder()
                         .withMsg(msg)
                         .withId(id)
-                        .withName(getName() + getDirectiveName(sampleDirectives, i))
-                        .withDescription(getDesc() + getAlertName(sampleDirectives, i))
+                        .withName(getName() + " " + getDirectiveName(sampleDirectives, i))
+                        .withDescription(getDifferencesDetails(sampleDirectives, siteDirectives, i))
                         .withEvidence(cspHeaderValues.get(0))
-                        .withDifference(getDifferencesDetails(sampleDirectives, siteDirectives, i))
+                        .withDifference(getDesc() + getAlertName(sampleDirectives, i))
                         .build();
                 raiseAlert(alertDto);
             }
@@ -134,20 +139,20 @@ public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner 
     }
 
     private String getDifferencesDetails(List<String> sampleDirectives, List<String> readDirectives, int i) {
-        StringBuilder sb = new StringBuilder();
+        LinkedList<String> result = new LinkedList<>();
         DiffMatchPatch diffMatchPatch = new DiffMatchPatch();
         LinkedList<DiffMatchPatch.Diff> listOfDiff = diffMatchPatch.diffMain(sampleDirectives.get(i), readDirectives.get(i), false);
 
         for (DiffMatchPatch.Diff node : listOfDiff) {
-            if (node.operation.name().equals("EQUAL")) {
-                sb.append("The following part is equal in site_csp_configuration file and CSP from site: ").append(node.text).append("\n");
-            } else if (node.operation.name().equals("INSERT")) {
-                sb.append("The following part is new CSP directives: ").append(node.text).append("\n");
+            if (node.operation.name().equals("INSERT")) {
+                result.push("The following part is new CSP directives: " + node.text + "\n" + "\n");
+            } else if (node.operation.name().equals("EQUAL")) {
+                result.add("The following part is equal in site_csp_configuration file and CSP from site: " + node.text + "\n");
             } else {
-                sb.append("The following part with new directive or some of directive has been modified: ").append(node.text).append("\n");
+                result.add("The following part with new directive or some of directive has been modified: " + node.text + "\n");
             }
         }
-        return sb.toString();
+        return result.toString().replaceAll("[\\[\\]]", " ");
     }
 
     private String getAlertName(List<String> sampleDirectives, int i) {
@@ -188,7 +193,7 @@ public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner 
 
     private File getConfigFile() {
         return new File("C:\\Users\\Oleksii_Kres\\Idea Project\\zap_project\\zap-extensions\\addOns\\pscanrules\\src\\main\\zapHomeFiles\\site_config\\site_csp_configuration");
-        //return new File(Constant.getZapHome() + File.separator + "site_config" + File.separator + "site_csp_configuration");
+//        return new File(Constant.getZapHome() + File.separator + "site_config" + File.separator + "site_csp_configuration");
     }
 }
 
