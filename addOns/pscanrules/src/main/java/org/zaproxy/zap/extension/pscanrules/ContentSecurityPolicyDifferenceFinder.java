@@ -145,11 +145,11 @@ public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner 
 
         for (DiffMatchPatch.Diff node : listOfDiff) {
             if (node.operation.name().equals("INSERT")) {
-                result.push("The following part is new CSP directives: " + node.text + "\n" + "\n");
+                result.push("The following part are new CSP directives: " + node.text + "\n" + "\n");
             } else if (node.operation.name().equals("EQUAL")) {
                 result.add("The following part is equal in site_csp_configuration file and CSP from site: " + node.text + "\n");
             } else {
-                result.add("The following part with new directive or some of directive has been modified: " + node.text + "\n");
+                result.push("The following directives have been modified or deleted: " + node.text + "\n");
             }
         }
         return result.toString().replaceAll("[\\[\\]]", " ");
@@ -192,8 +192,8 @@ public class ContentSecurityPolicyDifferenceFinder extends PluginPassiveScanner 
     }
 
     private File getConfigFile() {
-        return new File("C:\\Users\\Oleksii_Kres\\Idea Project\\zap_project\\zap-extensions\\addOns\\pscanrules\\src\\main\\zapHomeFiles\\site_config\\site_csp_configuration");
-//        return new File(Constant.getZapHome() + File.separator + "site_config" + File.separator + "site_csp_configuration");
+//        return new File("C:\\Users\\Oleksii_Kres\\Idea Project\\zap_project\\zap-extensions\\addOns\\pscanrules\\src\\main\\zapHomeFiles\\site_config\\site_csp_configuration");
+        return new File(Constant.getZapHome() + File.separator + "site_config" + File.separator + "site_csp_configuration");
     }
 }
 
